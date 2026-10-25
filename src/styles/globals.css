@@ -70,3 +70,23 @@ a {
   background-color: rgb(255, 255, 255);
   z-index: 9999;
 }
+body.tuner-page {
+  height: auto;
+  min-height: 100dvh;
+  overflow: visible;
+  background: #fffbde !important;
+}
+body.tuner-graph-open {
+  overflow: hidden;
+}
+
+html.planner-page,
+body.planner-page {
+  height: auto;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+body.planner-page {
+  background: #fffbde !important;
+}

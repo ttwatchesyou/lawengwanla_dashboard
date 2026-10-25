@@ -1,3 +1,4 @@
+import { subscribeJson } from "../../utils/readPolling";
 import Head from "next/head";
 import React, { useState, useEffect, useRef } from "react";
 import styled, { keyframes, css } from "styled-components";
@@ -10,11 +11,11 @@ import {
 } from "@ant-design/icons";
 import { useTelemetry } from "../../hook/useTelemetry";
 
-export const API_BASE = process.env.NEXT_PUBLIC_ROBOT_API;
+export const API_BASE = process.env.NEXT_PUBLIC_ROBOT_API ?? "";
 export const STREAM_URL = process.env.NEXT_PUBLIC_STREAM_URL;
 const POLL_MS = 200;
-const DETECT_POLL_MS = 300;
-const MISSION_POLL_MS = 300;
+const DETECT_POLL_MS = 500;
+const MISSION_POLL_MS = 500;
 
 const rectZones = [
   { name: "table A", x: -2.9, y: -3.7, w: -1.2, h: -0.6, color: "#FFFF00" },
@@ -318,23 +319,8 @@ function MissionStatusCard({ mission }: { mission: MissionStatus | null }) {
 
   const [latest, setLatest] = useState<string>("");
 
-  useEffect(() => {
-    let alive = true;
-    const poll = async () => {
-      try {
-        const r = await fetch(`${API_BASE}/api/detected_objects`);
-        if (!r.ok) return;
-        const d = await r.json();
-        if (alive) setLatest(d.latest ?? "");
-      } catch {}
-    };
-    const id = setInterval(poll, DETECT_POLL_MS);
-    poll();
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
-  }, []);
+  useEffect(() => subscribeJson<any>(`${API_BASE}/api/detected_objects`,
+    data=>setLatest(data.latest??""),()=>{},DETECT_POLL_MS),[]);
 
   const colorize = (msg: string): string => {
     if (!msg) return C.muted;
@@ -499,14 +485,7 @@ export default function TelemetryDashboard() {
     setTimeout(() => setIsResetting(false), 2000);
   };
 
-  useEffect(() => {
-    let alive = true;
-    const poll = async () => {
-      try {
-        const r = await fetch(`${API_BASE}/api/mission/status`);
-        if (!r.ok) return;
-        const d: MissionStatus = await r.json();
-        if (alive) {
+  useEffect(() => subscribeJson<MissionStatus>(`${API_BASE}/api/mission/status`,d=>{
           setMission(d);
           if (
             d.mission_step === d.mission_total_steps &&
@@ -518,43 +497,16 @@ export default function TelemetryDashboard() {
             setActiveMode(1);
           }
           prevStepRef.current = d.mission_step;
-        }
-      } catch {}
-    };
-    const id = setInterval(poll, MISSION_POLL_MS);
-    poll();
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
-  }, []);
+  },()=>{},MISSION_POLL_MS),[]);
 
-  useEffect(() => {
-    let alive = true;
-    const poll = async () => {
-      try {
-        const r = await fetch(`${API_BASE}/api/telemetry`);
-        if (!r.ok) throw new Error();
-        const d = await r.json();
-        if (!alive) return;
-        setData(d);
-        setRos("online");
-        setOdom({ x: d.pose_x ?? 0, y: d.pose_y ?? 0, yaw: d.yaw ?? 0 });
-        setTrail((p) => {
-          const n = [...p, { x: d.pose_x ?? 0, y: d.pose_y ?? 0 }];
-          return n.length > 5000 ? n.slice(-5000) : n;
-        });
-      } catch {
-        if (alive) setRos("offline");
-      }
-    };
-    const id = setInterval(poll, POLL_MS);
-    poll();
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
-  }, []);
+  useEffect(() => subscribeJson<any>(`${API_BASE}/api/telemetry`,d=>{
+    setData(d);setRos("online");
+    const point={x:d.pose_x??0,y:d.pose_y??0};setOdom({...point,yaw:d.yaw??0});
+    setTrail(old=>{
+      const last=old[old.length-1];
+      return last && last.x===point.x && last.y===point.y?old:[...old,point].slice(-5000);
+    });
+  },()=>setRos("offline"),POLL_MS),[]);
 
   const handleSaveTrail = () => {
     if (trail.length === 0) return;

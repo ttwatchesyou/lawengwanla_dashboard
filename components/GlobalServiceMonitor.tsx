@@ -1,47 +1,22 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import toast, { Toaster } from "react-hot-toast";
-
-const API_BASE_URL = `${process.env.NEXT_PUBLIC_ROBOT_API}/api`;
+import { useServiceStatus } from "../utils/useServiceStatus";
 
 export default function GlobalServiceMonitor() {
-  const [prevReady, setPrevReady] = useState<boolean | null>(null);
-
+  const { ready, services, error } = useServiceStatus();
+  const previous = useRef<boolean | null>(null);
+  const previousError = useRef("");
   useEffect(() => {
-    const checkStatus = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/services`);
-        const data = await res.json();
-
-        const isReady = data.system_ready;
-
-        if (prevReady !== null && prevReady !== isReady) {
-          if (isReady) {
-            toast.success("✅ ระบบพร้อมทำงาน: Services ทั้งหมด Active", {
-              duration: 4000,
-            });
-          } else {
-            const downServices = data.services
-              .filter((s: any) => s.status !== "active")
-              .map((s: any) => s.name)
-              .join(", ");
-            toast.error(`⚠️ ตรวจพบปัญหา! กำลัง Auto-Restart: ${downServices}`, {
-              duration: 6000,
-            });
-          }
-        }
-        setPrevReady(isReady);
-      } catch (e) {
-        if (prevReady !== false) {
-          toast.error("❌ ขาดการเชื่อมต่อกับ Backend API!");
-          setPrevReady(false);
-        }
+    if (error && error !== previousError.current) toast.error("❌ ขาดการเชื่อมต่อกับ Backend API!");
+    if (!error && previous.current !== null && previous.current !== ready) {
+      if (ready) toast.success("✅ ระบบพร้อมทำงาน: Services ทั้งหมด Active", { duration: 4000 });
+      else if (ready === false) {
+        const down = services.filter(s => s.status !== "active" && s.auto_restart !== false).map(s => s.name).join(", ");
+        toast.error(`⚠️ ตรวจพบปัญหา! กำลัง Auto-Restart: ${down}`, { duration: 6000 });
       }
-    };
-
-    const interval = setInterval(checkStatus, 3000);
-    return () => clearInterval(interval);
-  }, [prevReady]);
-
+    }
+    previous.current = ready; previousError.current = error;
+  }, [ready, services, error]);
   return <Toaster position="top-right" />;
 }

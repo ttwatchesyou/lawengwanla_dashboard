@@ -9,6 +9,10 @@ import "../styles/globals.css";
 import "antd/dist/reset.css";
 import GlobalServiceMonitor from "../../components/GlobalServiceMonitor";
 
+// 🌟 Import Component ปุ่ม Shutdown เข้ามา
+import FloatingShutdown from "../../components/FloatingShutdown"; 
+import FloatingKioskExit from "../../components/FloatingKioskExit";
+
 export type NextPageWithLayout = NextPage & {
   getLayout?: (page: ReactElement) => ReactNode;
 };
@@ -22,8 +26,9 @@ function MyApp({ Component, pageProps }: AppPropsWithLayout) {
 
   return (
     <ConfigProvider theme={theme}>
-      <GlobalServiceMonitor />
+      <GlobalServiceMonitor /> 
       {getLayout(<Component {...pageProps} />)}
+      <FloatingKioskExit />
     </ConfigProvider>
   );
 }

@@ -1,17 +1,20 @@
 "use client";
+import { useServiceStatus, refreshServices } from "../../utils/useServiceStatus";
+
 
 import Head from "next/dist/shared/lib/head";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import styled, { keyframes } from "styled-components";
-// import RestartAllButton from "../../components/RestartAllButton"; // คอมเมนต์ไว้ถ้าไม่มีไฟล์นี้ หรือเปิดใช้ตามระบบเดิมของคุณ
+// import RestartAllButton from "../../components/RestartAllButton";
 
-const API_BASE_URL = `${process.env.NEXT_PUBLIC_ROBOT_API}/api`;
+import { serviceRequest } from "../../lib/serviceApi";
 
 interface ServiceData {
   name: string;
   status: string;
   last_check: string;
   last_restart: string;
+  auto_restart?: boolean;
 }
 
 type LoadingAction = "start" | "stop" | "restart" | "remove" | null;
@@ -36,12 +39,18 @@ const ServiceCard = ({
   onViewLogs: (name: string) => void;
 }) => {
   const [loading, setLoading] = useState<LoadingAction>(null);
+  const [error, setError] = useState("");
   const isActive = status === "active";
+
+  // 💡 เช็คว่านี่คือ Service ของหน้าเว็บตัวเองหรือไม่
+  const isSelf = name === "lawengwanla_dashboard.service";
 
   const handle = async (action: LoadingAction, fn: () => Promise<void>) => {
     setLoading(action);
-    await fn();
-    setLoading(null);
+    setError("");
+    try { await fn(); }
+    catch (error) { setError(error instanceof Error ? error.message : "เชื่อมต่อ Service ไม่สำเร็จ"); }
+    finally { setLoading(null); }
   };
 
   return (
@@ -68,6 +77,7 @@ const ServiceCard = ({
         </RemoveBtn>
       </CardHeader>
 
+      {name === "lawengwanla-mainprogram.service" && <div data-testid="mainprogram-no-autorestart">โปรแกรมวิ่งสนาม · ปิดแล้วคงปิด · ไม่ Auto-Restart</div>}
       <TimeInfo>
         <div>⏱ เช็คล่าสุด: {last_check || "-"}</div>
         {last_restart !== "-" && (
@@ -77,19 +87,24 @@ const ServiceCard = ({
 
       <ButtonGroup>
         <ActionBtn
-          $color="#4ade80"
+          $color="#d1fae5" // สีเขียวพาสเทลสำหรับปุ่ม Start (รักษาสีเชิงสัญลักษณ์)
+          $textColor="#065f46"
           disabled={loading !== null}
           onClick={() => handle("start", () => onControl(name, "start"))}
         >
-          {loading === "start" ? <Spin /> : "▶ START"}
+          {loading === "start" ? <Spin $dark /> : "▶ START"}
         </ActionBtn>
 
+        {/* 🔒 ล็อกปุ่ม STOP ถ้าเป็นหน้าเว็บตัวเอง */}
         <ActionBtn
-          $color="#f87171"
-          disabled={loading !== null}
+          $color={isSelf ? "#f1f5f9" : "#fee2e2"} // เปลี่ยนเป็นสีเทาถ้าเป็นตัวเอง
+          $textColor={isSelf ? "#94a3b8" : "#991b1b"}
+          disabled={loading !== null || isSelf} // ปิดการกด (Disable)
           onClick={() => handle("stop", () => onControl(name, "stop"))}
+          style={{ cursor: isSelf ? "not-allowed" : "pointer" }}
+          title={isSelf ? "ไม่สามารถ Stop หน้าเว็บตัวเองได้" : ""}
         >
-          {loading === "stop" ? <Spin /> : "⏹ STOP"}
+          {loading === "stop" ? <Spin $dark /> : (isSelf ? "🔒 STOP" : "⏹ STOP")}
         </ActionBtn>
 
         <RestartCardBtn
@@ -98,30 +113,25 @@ const ServiceCard = ({
         >
           {loading === "restart" ? <Spin $dark /> : "↺ RESTART"}
         </RestartCardBtn>
+        
         <LogBtn onClick={() => onViewLogs(name)}>📋 LOGS</LogBtn>
       </ButtonGroup>
+      {error && <p role="alert">{error}</p>}
     </Card>
   );
 };
 
 export default function ServiceDashboard() {
   const [isClient, setIsClient] = useState(false);
-  const [services, setServices] = useState<ServiceData[]>([]);
+  const { services, error: readError } = useServiceStatus();
   const [newSvc, setNewSvc] = useState("");
   const [logs, setLogs] = useState({ open: false, content: "", title: "" });
-
-  const fetchServices = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/services`);
-      const data = await res.json();
-      setServices(data.services || []);
-    } catch (e) {
-      console.error("Fetch Error:", e);
-    }
-  };
+  const [error, setError] = useState("");
+  const fetchServices = refreshServices;
+  useEffect(() => { setError(readError); }, [readError]);
 
   const handleControl = async (name: string, action: string) => {
-    await fetch(`${API_BASE_URL}/control`, {
+    await serviceRequest("/control", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ service: name, action }),
@@ -130,7 +140,7 @@ export default function ServiceDashboard() {
   };
 
   const handleRestart = async (name: string) => {
-    await fetch(`${API_BASE_URL}/restart`, {
+    await serviceRequest("/restart", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ service: name }),
@@ -140,7 +150,7 @@ export default function ServiceDashboard() {
   };
 
   const handleRemove = async (name: string) => {
-    await fetch(`${API_BASE_URL}/remove_service`, {
+    await serviceRequest("/remove_service", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ service: name }),
@@ -151,8 +161,7 @@ export default function ServiceDashboard() {
   const handleViewLogs = async (name: string) => {
     setLogs({ open: true, content: "Loading logs…", title: name });
     try {
-      const res = await fetch(`${API_BASE_URL}/logs/${name}`);
-      const data = await res.json();
+      const data = await serviceRequest(`/logs/${encodeURIComponent(name)}`);
       setLogs({
         open: true,
         content: data.logs || "No logs found.",
@@ -165,20 +174,20 @@ export default function ServiceDashboard() {
 
   const handleAddService = async () => {
     if (!newSvc.trim()) return;
-    await fetch(`${API_BASE_URL}/add_service`, {
+    try {
+    await serviceRequest("/add_service", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ service: newSvc.trim() }),
     });
     setNewSvc("");
     fetchServices();
+    } catch (error) { setError(error instanceof Error ? error.message : "เพิ่ม Service ไม่สำเร็จ"); }
   };
 
   useEffect(() => {
     setIsClient(true);
-    fetchServices();
-    const id = setInterval(fetchServices, 3000);
-    return () => clearInterval(id);
+
   }, []);
 
   if (!isClient) return null;
@@ -193,8 +202,8 @@ export default function ServiceDashboard() {
       <MainSection>
         <MainBox>
           <Header>
-            <Title>SUDSAKHON SERVICE</Title>
-            <Subtitle>Backend API connected via Config Port</Subtitle>
+            <Title>LAWENGWANLA SERVICE</Title>
+            <Subtitle>เปิด–ปิดโปรแกรมหุ่น · Mainprogram ปิดแล้วไม่เริ่มใหม่อัตโนมัติ</Subtitle>
           </Header>
 
           <ControlRow>
@@ -210,6 +219,7 @@ export default function ServiceDashboard() {
             </InputGroup>
           </ControlRow>
 
+          {error && <p role="alert">{error}</p>}
           <ServiceGrid>
             {services.map((svc) => (
               <ServiceCard
@@ -252,7 +262,7 @@ const Spin = styled.span<{ $dark?: boolean }>`
   display: inline-block;
   width: 12px;
   height: 12px;
-  border: 2px solid ${(p) => (p.$dark ? "#1e3271" : "currentColor")};
+  border: 2px solid ${(p) => (p.$dark ? "#3E3E75" : "currentColor")};
   border-top-color: transparent;
   border-radius: 50%;
   animation: ${spin} 0.6s linear infinite;
@@ -265,7 +275,7 @@ const MainSection = styled.div`
   width: 100%;
   min-height: 100vh;
   padding: 10px;
-  background-color: #fffbde;
+  background-color: #fffbde; /* พื้นหลังสีขาวอมมินต์สว่างๆ */
 
   @media (min-width: 768px) {
     padding: 40px 24px;
@@ -279,9 +289,10 @@ const MainBox = styled.div`
   width: 100%;
   max-width: 1200px;
   padding: 24px 16px;
-  background: #1e3271;
+  background: #4E1F6E; /* กล่องหลักสีขาวสะอาด */
   border-radius: 20px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  border: 2px solid #98E8DE; /* ขลิบเส้นกรอบสีมินต์ */
+  box-shadow: 0 10px 30px rgba(62, 62, 117, 0.12); /* เงาสีกรมท่าจางๆ */
 
   @media (min-width: 768px) {
     padding: 40px;
@@ -296,8 +307,8 @@ const Header = styled.div`
 const Title = styled.h1`
   margin: 0;
   font-size: 1.8rem;
-  font-weight: 800;
-  color: #ffdc7c;
+  font-weight: 900;
+  color: #ffdc7c; /* ม่วงเข้ม */
 
   @media (min-width: 768px) {
     font-size: 2.8rem;
@@ -307,8 +318,8 @@ const Title = styled.h1`
 const Subtitle = styled.p`
   margin: 8px 0 0;
   font-family: monospace;
-  font-size: 0.8rem;
-  color: #4ade80;
+  font-size: 0.9rem;
+  color: #ffdc7c; /* Teal */
 `;
 
 const ControlRow = styled.div`
@@ -334,15 +345,21 @@ const InputGroup = styled.div`
 const StyledInput = styled.input`
   width: 100%;
   padding: 14px;
-  background: rgba(0, 0, 0, 0.3);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #ffffff;
+  color: #3E3E75; /* กรมท่า */
+  border: 2px solid #98E8DE; /* เส้นกรอบสีมินต์ */
   border-radius: 12px;
   font-size: 16px;
   outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
 
   &:focus {
-    border-color: #ffdc7c;
+    border-color: #45A9A9; /* สี Teal เวลาพิมพ์ */
+    box-shadow: 0 0 0 3px rgba(69, 169, 169, 0.15);
+  }
+
+  &::placeholder {
+    color: #cbd5e1;
   }
 
   @media (min-width: 768px) {
@@ -353,16 +370,20 @@ const StyledInput = styled.input`
 const AddButton = styled.button`
   width: 100%;
   padding: 14px 24px;
-  background: #ffdc7c;
-  color: #1e3271;
+  background: #45A9A9; /* สี Teal */
+  color: #ffffff;
   font-weight: bold;
   border: none;
   border-radius: 12px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, transform 0.1s;
 
   &:hover {
-    background: #ffe6a5;
+    background: #3E3E75; /* สีกรมท่าตอน Hover */
+  }
+  
+  &:active {
+    transform: scale(0.98);
   }
 
   @media (min-width: 768px) {
@@ -379,9 +400,11 @@ const ServiceGrid = styled.div`
 
 const Card = styled.div<{ $active: boolean }>`
   padding: 18px;
-  background: rgba(255, 255, 255, 0.05);
+  background: #ffffff;
   border-radius: 16px;
-  border-left: 6px solid ${(p) => (p.$active ? "#4ade80" : "#f87171")};
+  border: 1px solid #98E8DE; /* กรอบการ์ดสีมินต์ */
+  border-left: 6px solid ${(p) => (p.$active ? "#45A9A9" : "#f87171")}; /* แถบสถานะใช้ Teal ถ้าทำงานอยู่ */
+  box-shadow: 0 4px 12px rgba(62, 62, 117, 0.05);
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -398,7 +421,7 @@ const CardHeader = styled.div`
 const ServiceName = styled.h3`
   margin: 0;
   font-size: 1rem;
-  color: white;
+  color: #3E3E75; /* สีกรมท่า */
   word-break: break-all;
   line-height: 1.4;
 `;
@@ -408,9 +431,9 @@ const StatusBadge = styled.span<{ $active: boolean }>`
   font-size: 0.7rem;
   font-weight: bold;
   text-transform: uppercase;
-  color: ${(p) => (p.$active ? "#4ade80" : "#f87171")};
+  color: ${(p) => (p.$active ? "#ffffff" : "#991b1b")};
   background: ${(p) =>
-    p.$active ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)"};
+    p.$active ? "#45A9A9" : "#fee2e2"};
   border-radius: 4px;
   flex-shrink: 0;
 `;
@@ -418,7 +441,7 @@ const StatusBadge = styled.span<{ $active: boolean }>`
 const RemoveBtn = styled.button`
   background: transparent;
   border: none;
-  color: #ef4444;
+  color: #fca5a5;
   font-size: 1.2rem;
   font-weight: bold;
   cursor: pointer;
@@ -426,7 +449,7 @@ const RemoveBtn = styled.button`
   transition: transform 0.15s, color 0.15s;
 
   &:hover {
-    color: #fca5a5;
+    color: #ef4444;
     transform: scale(1.2);
   }
 
@@ -438,7 +461,7 @@ const RemoveBtn = styled.button`
 
 const TimeInfo = styled.div`
   font-size: 0.75rem;
-  color: #9ca3af;
+  color: #94a3b8;
   margin-bottom: 8px;
 `;
 
@@ -458,11 +481,11 @@ const ButtonGroup = styled.div`
   }
 `;
 
-const ActionBtn = styled.button<{ $color: string }>`
+const ActionBtn = styled.button<{ $color: string; $textColor: string }>`
   width: 100%;
   padding: 12px 6px;
-  background: ${(p) => (p.$color === "#4ade80" ? "#16a34a" : "#dc2626")};
-  color: white;
+  background: ${(p) => p.$color};
+  color: ${(p) => p.$textColor};
   font-size: 12px;
   font-weight: 800;
   border: none;
@@ -475,8 +498,7 @@ const ActionBtn = styled.button<{ $color: string }>`
   transition: all 0.15s ease;
 
   &:hover:not(:disabled) {
-    filter: brightness(1.2);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    filter: brightness(0.95);
   }
 
   &:active:not(:disabled) {
@@ -492,8 +514,8 @@ const ActionBtn = styled.button<{ $color: string }>`
 const RestartCardBtn = styled.button`
   width: 100%;
   padding: 12px 6px;
-  background: #d97706;
-  color: white;
+  background: #fde68a; /* สีเหลืองพาสเทลเดิม เพราะในพาเลตไม่มีเหลือง */
+  color: #92400e;
   font-size: 12px;
   font-weight: 800;
   border: none;
@@ -506,8 +528,7 @@ const RestartCardBtn = styled.button`
   transition: all 0.15s ease;
 
   &:hover:not(:disabled) {
-    background: #f59e0b;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    background: #fcd34d;
   }
 
   &:disabled {
@@ -519,18 +540,18 @@ const RestartCardBtn = styled.button`
 const LogBtn = styled.button`
   width: 100%;
   padding: 12px 6px;
-  background: rgba(0, 0, 0, 0.4);
-  color: #94a3b8;
+  background: #98E8DE; /* สีมินต์ */
+  color: #3E3E75; /* สีกรมท่า */
   font-size: 12px;
-  font-weight: 600;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-weight: 800;
+  border: none;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.15s ease;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
+    background: #45A9A9; /* สี Teal */
+    color: #ffffff;
   }
 `;
 
@@ -541,17 +562,17 @@ const ModalOverlay = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(62, 62, 117, 0.6); /* ฉากหลังสีกรมท่าโปร่งแสง */
   backdrop-filter: blur(5px);
 `;
 
 const ModalContent = styled.div`
   width: 90%;
   max-width: 850px;
-  background: #1e3271;
+  background: #ffffff;
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
 `;
 
 const ModalHeader = styled.div`
@@ -559,23 +580,25 @@ const ModalHeader = styled.div`
   justify-content: space-between;
   align-items: center;
   padding: 16px 24px;
-  background: rgba(0, 0, 0, 0.2);
+  background: #3E3E75; /* แถบบนของ Modal สีกรมท่า */
 `;
 
 const ModalTitle = styled.div`
   font-family: monospace;
   font-size: 0.9rem;
-  color: #ffdc7c;
+  color: #98E8DE; /* ตัวอักษรสีมินต์ */
+  font-weight: bold;
 `;
 
 const CloseBtn = styled.button`
   background: none;
   border: none;
-  color: #ffffff66;
+  color: #98E8DE; /* ปุ่มปิดสีมินต์ */
   font-size: 1rem;
+  font-weight: bold;
   cursor: pointer;
   &:hover {
-    color: white;
+    color: #ffffff;
   }
 `;
 
@@ -584,8 +607,8 @@ const LogArea = styled.pre`
   margin: 0;
   padding: 24px;
   overflow-y: auto;
-  background: #000;
-  color: #4ade80;
+  background: #4E1F6E; /* พื้นหลัง Terminal สีม่วงเข้ม */
+  color: #98E8DE; /* สีอักษรสีมินต์ */
   font-family: "Consolas", monospace;
   font-size: 13px;
   line-height: 1.5;

@@ -1,0 +1,32 @@
+Turbo v2: recording-based resynthesis
+
+spool-low.wav / spool-high.wav:
+"Import car revs on Chassis Dyno with Turbo.wav" by editboy23
+https://freesound.org/people/editboy23/sounds/496171/
+Source: https://cdn.freesound.org/previews/496/496171_1784475-hq.mp3
+License: CC0 1.0 https://creativecommons.org/publicdomain/zero/1.0/
+Changes: mono, extracted 14.6–16.2 s and 23.3–24.9 s; bandpass EQ,
+44.1 kHz resampling, 80 ms equal-power loop seam, level normalization.
+
+blowoff.wav:
+"Peugeot 406 Turbo (turbocharged, HKS blow-off valve) - engine and exhaust sound"
+by nick7100 (YouTube), dated 14 February 2012.
+https://commons.wikimedia.org/wiki/File:Peugeot_406_Turbo_(turbocharged,_HKS_blow-off_valve)_-_engine_and_exhaust_sound_(YouTube_kx0Tvu4_K04).opus
+Original video: https://www.youtube.com/watch?v=kx0Tvu4_K04
+License: CC BY 3.0 https://creativecommons.org/licenses/by/3.0/
+Changes: mono, extracted 9.73–10.43 s, 1.3–11.5 kHz bandpass EQ,
+44.1 kHz resampling, edge fades, level normalization.
+No endorsement by the original creators is implied.
+
+Additional reference reviewed (not included in these assets):
+"Turbo Spooling and Blow Off.WAV" by EwanPenman11
+https://freesound.org/people/EwanPenman11/sounds/659544/ (CC0)
+
+The runtime crossfades the two recorded spool textures with inertia and
+pitch/airflow filtering according to robot speed and distance to the next stop.
+A separately enveloped recorded valve release follows a sustained boost drop.
+These are edited real recordings, not an exact reproduction of every turbo.
+
+demo.wav: 10-second offline render of this runtime using the processed samples
+above, two spool-up / lift-off cycles at 75% preview volume. Same source credits
+and CC BY 3.0 attribution apply to the edited HKS recording in this preview.

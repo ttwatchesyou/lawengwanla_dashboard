@@ -1,3 +1,4 @@
+import { useServiceStatus } from "../utils/useServiceStatus";
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 import { Layout } from "antd";
@@ -15,26 +16,11 @@ interface ServiceData {
 
 const HeaderComponent: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
-  const [services, setServices] = useState<ServiceData[]>([]);
+  const { services } = useServiceStatus();
   const [isClient, setIsClient] = useState(false);
   const router = useRouter();
 
-  const fetchServices = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/services`);
-      const data = await res.json();
-      setServices(Array.isArray(data) ? data : data.services || []);
-    } catch (e) {
-      console.error("Fetch Error:", e);
-    }
-  };
-
-  useEffect(() => {
-    setIsClient(true);
-    fetchServices();
-    const id = setInterval(fetchServices, 3000);
-    return () => clearInterval(id);
-  }, []);
+  useEffect(() => { setIsClient(true); }, []);
 
   const handleNavigation = (path: string) => {
     router.push(path);
@@ -59,9 +45,20 @@ const HeaderComponent: React.FC = () => {
           <StyledButton onClick={() => handleNavigation("/Service")}>
             Service
           </StyledButton>
+          <StyledButton onClick={() => handleNavigation("/WheelTuner")}>
+            Wheel Tuner
+          </StyledButton>
           <StyledButton onClick={() => handleNavigation("/RobotTuner")}>
             Tuner
           </StyledButton>
+          <StyledButton onClick={() => handleNavigation("/MazePlanner")}>
+            Maze Planner
+          </StyledButton>
+          <StyledButton onClick={() => handleNavigation("/SensorCheck")}>
+            Sensors
+          </StyledButton>
+          <StyledButton onClick={() => handleNavigation("/RelayControl")}>Relays</StyledButton>
+          {/*
           <StyledButton onClick={() => handleNavigation("/TelemetryPage")}>
             Telemetry
           </StyledButton>
@@ -73,7 +70,7 @@ const HeaderComponent: React.FC = () => {
           </StyledButton>
           <StyledButton onClick={() => handleNavigation("/Mission")}>
             Mission
-          </StyledButton>
+          </StyledButton> */}
         </DesktopMenuSection>
 
         {/* ปุ่ม Hamburger จะแสดงเฉพาะจอมือถือ/แท็บเล็ต/ไอแพด */}
@@ -90,9 +87,20 @@ const HeaderComponent: React.FC = () => {
           <StyledButton onClick={() => handleNavigation("/Service")}>
             Service
           </StyledButton>
+          <StyledButton onClick={() => handleNavigation("/WheelTuner")}>
+            Wheel Tuner
+          </StyledButton>
           <StyledButton onClick={() => handleNavigation("/RobotTuner")}>
             Tuner
           </StyledButton>
+          <StyledButton onClick={() => handleNavigation("/MazePlanner")}>
+            Maze Planner
+          </StyledButton>
+          <StyledButton onClick={() => handleNavigation("/SensorCheck")}>
+            Sensors
+          </StyledButton>
+          <StyledButton onClick={() => handleNavigation("/RelayControl")}>Relays</StyledButton>
+          {/*
           <StyledButton onClick={() => handleNavigation("/TelemetryPage")}>
             Telemetry
           </StyledButton>
@@ -104,7 +112,7 @@ const HeaderComponent: React.FC = () => {
           </StyledButton>
           <StyledButton onClick={() => handleNavigation("/Mission")}>
             Mission
-          </StyledButton>
+          </StyledButton> */}
         </MobileMenu>
 
         {/* Overlay คลิกพื้นที่ว่างเพื่อปิดเมนู */}
@@ -119,9 +127,10 @@ export default HeaderComponent;
 // ─── Styled Components ────────────────────────────────────────────────────────
 
 const StyledHeader = styled(Header)`
-  background-color: #1e3271;
+  background-color: #4E1F6E;
   width: 100%;
   height: 80px;
+  line-height: normal;
   padding: 0;
   display: flex;
   align-items: center;
@@ -134,6 +143,7 @@ const StyledHeader = styled(Header)`
 
 const WrapperHeader = styled.div`
   width: 100%;
+  height: 100%;
   max-width: 1920px;
   padding: 0 24px;
   display: flex;
@@ -145,6 +155,8 @@ const HeadLogo = styled.img`
   width: 100%;
   max-width: 120px;
   height: auto;
+  max-height: 64px;
+  object-fit: contain;
   cursor: pointer;
   transition: transform 0.2s;
 
@@ -243,9 +255,10 @@ const MobileMenu = styled.div<{ isMenuOpen: boolean }>`
   /* 🎯 เพิ่มคำสั่งนี้ เพื่อให้เมนูสามารถใช้นิ้วปัดเลื่อนขึ้นลงได้ */
   overflow-y: auto;
 
-  transform: ${({ isMenuOpen }) =>
-    isMenuOpen ? "translateX(0)" : "translateX(100%)"};
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  visibility: ${({ isMenuOpen }) => isMenuOpen ? "visible" : "hidden"};
+  opacity: ${({ isMenuOpen }) => isMenuOpen ? 1 : 0};
+  pointer-events: ${({ isMenuOpen }) => isMenuOpen ? "auto" : "none"};
+  transition: opacity 0.2s ease, visibility 0.2s ease;
   z-index: 90;
 
   @media (min-width: 1201px) {
